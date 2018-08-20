@@ -38,7 +38,10 @@ $wgMessagesDirs['SemanticACL'] = __DIR__ . '/i18n';
 // Register extension hooks.
 $wgHooks['userCan'][] = 'saclGetPermissionErrors';
 $wgHooks['smwInitProperties'][] = 'saclInitProperties';
-
+$wgHooks['ParserFetchTemplate'][] = 'saclCheckTemplatePermission';
+//$wgHooks['BeforeParserFetchTemplateAndtitle'][] = 'saclCheckTemplatePermission';
+$wgHooks['SpecialSearchResults'][] = 'saclCheckSearchResultsPermission';
+$wgHooks['BeforeParserFetchFileAndTitle'][] = 'saclCheckFilePermission';
 // Create extension's permissions
 $wgGroupPermissions['sysop']['sacl-exempt'] = true;
 $wgAvailableRights[] = 'sacl-exempt';
@@ -65,23 +68,80 @@ function saclInitProperties() {
 	SMWDIProperty::registerProperty( '___EDITABLE_WL_USER', '_wpg',
 					wfMessage('sacl-property-editable-wl-user')->inContentLanguage()->text() );
 
-	SMWDIProperty::registerPropertyAlias( '___EDITABLE_BY', 'Editable by' );
+	SMWDIProperty::registerPropertyAlias( '___EDITABLE', 'Editable by' );
 	SMWDIProperty::registerPropertyAlias( '___EDITABLE_WL_GROUP', 'Editable by group' );
 	SMWDIProperty::registerPropertyAlias( '___EDITABLE_WL_USER', 'Editable by user' );
 
 	return true;
 }
 
+function unHookPopups( OutputPage &$out, Skin &$skin )
+{
+	global $wgHooks;
+}
 
-function saclGetPermissionErrors( $title, $user, $action, &$result ) {
+function saclCheckFilePermission ($parser, $nt, &$options, &$descQuery) {
+	
+	if(getPermissions($nt, '___VISIBLE', RequestContext::getMain()->getUser())){
+		return true; // The user is allowed to view that file.
+	}
+	
+	$options['broken'] = true;
+	
+	return false;
+}
 
-	// Failsafe: Some users are exempt from Semantic ACLs
-	if ( $user->isAllowed( 'sacl-exempt' ) ) {
+function saclCheckSearchResultsPermission ($term, &$titleMatches, &$textMatches) {
+	
+	if(get_class($textMatches) != 'SqlSearchResultSet' || get_class($titleMatches) != 'SqlSearchResultSet') {
 		return true;
 	}
+	
+	$user = RequestContext::getMain()->getUser();
+	
+	$results = $titleMatches->extractResults();
+	foreach($results as $key => $result) {
+		if(!getPermissions($result->getTitle(), '___VISIBLE', $user)){
+			// The user is not allowed to view that page.
+			unset($results[$key]);
+		}
+	}
+	$titleMatches = new SqlSearchResultSet
+	
+	
+	foreach($textMatches->extractResults() as $key => $result) {
+		if(!getPermissions($result->getTitle(), '___VISIBLE', $user)){
+			// The user is not allowed to view that page.
+			unset($textMatches->extractResults()[$key]);
+		}
+	}
+}
 
-	$store = smwfGetStore();
-	$subject = SMWDIWikiPage::newFromTitle( $title );
+function saclCheckTemplatePermission ($parser, $title, $rev, &$text, &$deps) {
+//function saclCheckTemplatePermission ($parser, $title, &$skip, $id) {
+	
+	if(getPermissions($title, '___VISIBLE', RequestContext::getMain()->getUser())){
+		return true; // User is allowed to view that template.
+	}
+	
+	global $wgHooks;
+	
+	$hookName = 'saclCheckTemplatePermission';
+	if($hookIndex = array_search($hookName, $wgHooks['ParserFetchTemplate']) === false) {
+		throw new Exception('Function name could no be found in hook.'); // This would only happen with a code refactoring mistake.
+	}
+	
+	// Since we will be rendering wikicode, unset the hook to prevent a recursive permission error on templates.
+	unset($wgHooks['ParserFetchTemplate'][$hookIndex]);
+	
+	$text = wfMessage(RequestContext::getMain()->getUser()->isAnon() ? 'sacl-template-render-denied-anonymous' : 'sacl-template-render-denied-registered')->plain();
+	
+	$wgHooks['ParserFetchTemplate'] = $hookName; // Reset the hook.
+	
+	return false;
+}
+
+function saclGetPermissionErrors( $title, $user, $action, &$result ) {
 
 	// The prefix for the whitelisted group and user properties
 	// Either ___VISIBLE or ___EDITABLE
@@ -90,19 +150,43 @@ function saclGetPermissionErrors( $title, $user, $action, &$result ) {
 	if ( $action == 'read' ) {
 		$prefix = '___VISIBLE';
 	} else {
-		$type_property = 'Editable by';
 		$prefix = '___EDITABLE';
 	}
+	
+	if(!getPermissions($title, $prefix, $user))
+	{
+		$result = false;
+		return false;
+	}
+		
+	return true;
+}
 
+
+function getPermissions($title, $prefix, $user)
+{
+	global $smwgNamespacesWithSemanticLinks;
+	
+	if(!isset($smwgNamespacesWithSemanticLinks[$title->getNamespace()]) || !$smwgNamespacesWithSemanticLinks[$title->getNamespace()]) {
+		return true; // No need to check permissions on namespaces that do not support SMW.
+	}
+	
+	// Failsafe: Some users are exempt from Semantic ACLs
+	if ( $user->isAllowed( 'sacl-exempt' ) ) {
+		return true;
+	}
+	
+	$store = smwfGetStore();
+	$subject = SMWDIWikiPage::newFromTitle( $title );
+	
 	$property = new SMWDIProperty($prefix);
 	$aclTypes = $store->getPropertyValues( $subject, $property );
-
+		
 	foreach( $aclTypes as $valueObj ) {
 		$value = strtolower($valueObj->getString());
 
 		if ( $value == 'users' ) {
 			if ( $user->isAnon() ) {
-				$result = false;
 				return false;
 			}
 		} elseif ( $value == 'whitelist' ) {
@@ -132,7 +216,6 @@ function saclGetPermissionErrors( $title, $user, $action, &$result ) {
 			}
 
 			if ( ! $isWhitelisted ) {
-				$result = false;
 				return false;
 			}
 		} elseif ( $value == 'public' ) {
