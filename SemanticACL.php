@@ -39,8 +39,6 @@ $wgMessagesDirs['SemanticACL'] = __DIR__ . '/i18n';
 $wgHooks['userCan'][] = 'saclGetPermissionErrors';
 $wgHooks['smwInitProperties'][] = 'saclInitProperties';
 $wgHooks['ParserFetchTemplate'][] = 'saclCheckTemplatePermission';
-//$wgHooks['BeforeParserFetchTemplateAndtitle'][] = 'saclCheckTemplatePermission';
-$wgHooks['SpecialSearchResults'][] = 'saclCheckSearchResultsPermission';
 $wgHooks['BeforeParserFetchFileAndTitle'][] = 'saclCheckFilePermission';
 // Create extension's permissions
 $wgGroupPermissions['sysop']['sacl-exempt'] = true;
@@ -75,46 +73,18 @@ function saclInitProperties() {
 	return true;
 }
 
-function unHookPopups( OutputPage &$out, Skin &$skin )
-{
-	global $wgHooks;
-}
-
+/**
+ * Also works with galleries.
+ * */
 function saclCheckFilePermission ($parser, $nt, &$options, &$descQuery) {
 	
 	if(getPermissions($nt, '___VISIBLE', RequestContext::getMain()->getUser())){
 		return true; // The user is allowed to view that file.
 	}
 	
-	$options['broken'] = true;
+	$options['broken'] = true; // Show a broken file link.
 	
 	return false;
-}
-
-function saclCheckSearchResultsPermission ($term, &$titleMatches, &$textMatches) {
-	
-	if(get_class($textMatches) != 'SqlSearchResultSet' || get_class($titleMatches) != 'SqlSearchResultSet') {
-		return true;
-	}
-	
-	$user = RequestContext::getMain()->getUser();
-	
-	$results = $titleMatches->extractResults();
-	foreach($results as $key => $result) {
-		if(!getPermissions($result->getTitle(), '___VISIBLE', $user)){
-			// The user is not allowed to view that page.
-			unset($results[$key]);
-		}
-	}
-	$titleMatches = new SqlSearchResultSet
-	
-	
-	foreach($textMatches->extractResults() as $key => $result) {
-		if(!getPermissions($result->getTitle(), '___VISIBLE', $user)){
-			// The user is not allowed to view that page.
-			unset($textMatches->extractResults()[$key]);
-		}
-	}
 }
 
 function saclCheckTemplatePermission ($parser, $title, $rev, &$text, &$deps) {
@@ -141,6 +111,9 @@ function saclCheckTemplatePermission ($parser, $title, $rev, &$text, &$deps) {
 	return false;
 }
 
+/**
+ * This hook is also triggered when displaying search results.
+ * */
 function saclGetPermissionErrors( $title, $user, $action, &$result ) {
 
 	// The prefix for the whitelisted group and user properties
@@ -162,7 +135,6 @@ function saclGetPermissionErrors( $title, $user, $action, &$result ) {
 	return true;
 }
 
-
 function getPermissions($title, $prefix, $user)
 {
 	global $smwgNamespacesWithSemanticLinks;
@@ -172,7 +144,7 @@ function getPermissions($title, $prefix, $user)
 	}
 	
 	// Failsafe: Some users are exempt from Semantic ACLs
-	if ( $user->isAllowed( 'sacl-exempt' ) ) {
+	if ( $user->isAllowed( 'sacl-exempt') ) {
 		return true;
 	}
 	
