@@ -39,7 +39,9 @@ $wgMessagesDirs['SemanticACL'] = __DIR__ . '/i18n';
 $wgHooks['userCan'][] = 'saclGetUserPermissionsErrors';
 $wgHooks['smwInitProperties'][] = 'saclInitProperties';
 $wgHooks['ParserFetchTemplate'][] = 'saclParserFetchTemplate';
-$wgHooks['BeforeParserFetchFileAndTitle'][] = 'saclBeforeParserFetchFileAndTitle';
+//$wgHooks['ImageBeforeProduceHTML'][] = 'saclImageBeforeProduceHTML';
+//$wgHooks['BeforeParserFetchFileAndTitle'][] = 'saclBeforeParserFetchFileAndTitle';
+$wgHooks['BadImage'][] = 'saclBadImage';
 
 // Create extension's permissions
 $wgGroupPermissions['sysop']['sacl-exempt'] = true;
@@ -74,6 +76,33 @@ function saclInitProperties() {
 	return true;
 }
 
+/*function saclImageBeforeProduceHTML(&$skin, &$title, &$file, &$frameParams, &$handlerParams, &$time, &$res) {
+	if(hasPermission($title, 'read', RequestContext::getMain()->getUser(), true)){
+		return true; // The user is allowed to view that file.
+	}
+	
+	return false;
+}*/
+
+/** When checking against the bad image list. Change $bad and return
+false to override. If an image is "bad", it is not rendered inline in wiki
+pages or galleries in category pages.
+@param string $name image name being checked
+@param bool &$bad  Whether or not the image is "bad" 
+@return bool false if the image is bad */
+function saclBadImage($name, &$bad) {
+	// Also works with galleries and categories.
+	
+	if(hasPermission(Title::newFromText($name, NS_FILE), 'read', RequestContext::getMain()->getUser(), true)){
+		return true; // The user is allowed to view that file.
+	}
+	
+	$bad = true;
+	
+	return false;
+}
+
+
 /**
  * Called before an image is rendered by Parser to check the image's permissions. Displays a broken link if the 
  * image cannot be viewed.
@@ -83,7 +112,7 @@ function saclInitProperties() {
   as a key then the file will appear as a broken thumbnail
  * @param string $descQuery: query string to add to thumbnail URL
  * */
-function saclBeforeParserFetchFileAndTitle($parser, $nt, &$options, &$descQuery) {
+/*function saclBeforeParserFetchFileAndTitle($parser, $nt, &$options, &$descQuery) {
 	
 	// Also works with galleries.
 	
@@ -94,7 +123,7 @@ function saclBeforeParserFetchFileAndTitle($parser, $nt, &$options, &$descQuery)
 	$options['broken'] = true; // Show a broken file link.
 	
 	return false;
-}
+}*/
 
 /**
  * Called when the parser fetches a template. Replaces the template with an error message if the user cannot
@@ -180,7 +209,9 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 		/* If the parser caches the page, the same page will be returned without consideration for the user viewing the page.
 		 * Disable the cache to it gets rendered anew for every user. */
 		global $wgParser;
-		$wgParser->getOutput()->updateCacheExpiry(0);
+		if($wgParser->getOutput()) {
+			$wgParser->getOutput()->updateCacheExpiry(0); 
+		}
 		RequestContext::getMain()->getOutput()->enableClientCache(false);
 	}
 	
