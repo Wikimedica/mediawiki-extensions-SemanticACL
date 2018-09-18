@@ -93,12 +93,23 @@ pages or galleries in category pages.
 function saclBadImage($name, &$bad) {
 	// Also works with galleries and categories.
 	
-	if(hasPermission(Title::newFromText($name, NS_FILE), 'read', RequestContext::getMain()->getUser(), true)){
+	$title = Title::newFromText($name, NS_FILE);
+	
+	$user = RequestContext::getMain()->getUser();
+	
+	if(!fileHasRequiredCategory($title) && !$user->isAllowed( 'view-non-categorized-media') ) {
+		disableCaching();
+		$bad  = true;
+		return false;
+	}
+	
+	if(hasPermission($title, 'read', $user , true)){
 		return true; // The user is allowed to view that file.
 	}
 	
-	$bad = true;
+	disableCaching();
 	
+	$bad = true;
 	return false;
 }
 
@@ -192,7 +203,7 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 	$prefix = '';
 	
 	// Build the semantic property prefix according to the action.
-	if ( $action == 'read' ) {
+	if ( $action == 'read' || $action == 'raw' ) {
 		$prefix = '___VISIBLE';
 	} else {
 		$prefix = '___EDITABLE';
@@ -208,16 +219,19 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 	{
 		/* If the parser caches the page, the same page will be returned without consideration for the user viewing the page.
 		 * Disable the cache to it gets rendered anew for every user. */
-		global $wgParser;
-		if($wgParser->getOutput()) {
-			$wgParser->getOutput()->updateCacheExpiry(0); 
-		}
-		RequestContext::getMain()->getOutput()->enableClientCache(false);
+		disableCaching();
 	}
 	
-	/* Failsafe: Some users are exempt from Semantic ACLs.*/
+	// Failsafe: Some users are exempt from Semantic ACLs.
 	if ( $user->isAllowed( 'sacl-exempt') ) {
 		return true;
+	}
+	
+	if($title->getNamespace() == NS_FILE) {
+		
+		if(!fileHasRequiredCategory($title) && !$user->isAllowed( 'view-non-categorized-media') ) {
+			return false;
+		}
 	}
 	
 	foreach( $aclTypes as $valueObj ) {
@@ -262,5 +276,48 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 		}
 	}
 
+	return true;
+}
+
+
+/** Disable caching for the page currently being rendered. */
+function disableCaching() {
+	global $wgParser;
+	if($wgParser->getOutput()) {
+		$wgParser->getOutput()->updateCacheExpiry(0);
+	}
+	
+	RequestContext::getMain()->getOutput()->enableClientCache(false);
+}
+
+/** Files that have not been categorized most likely have an unknown status when it comes to author's rights. This function tests if 
+ * a file is part of a category for files whose's permissions have been set.
+ * @param Title $title the title of the file
+ * @return boolean if the file has been properly categorized */
+function fileHasRequiredCategory($title) {
+	global $wgPublicImagesCategory;
+	
+	if(isset($wgPublicImagesCategory) && $wgPublicImagesCategory && $title->getNamespace() == NS_FILE) {
+		
+		$inCategory = false;
+		
+		$page = Article::newFromTitle($title, RequestContext::getMain());
+		$file = $page->getFile(); //wfFindFile( $this->getTitle() )
+		
+		if(!$file->isLocal()) { // Foreign files are always shown.
+			return true;
+		}
+		
+		foreach($page->getCategories() as $category)
+		{
+			if($category->getDBKey() == str_replace(" ", "_", $wgPublicImagesCategory))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
 	return true;
 }
