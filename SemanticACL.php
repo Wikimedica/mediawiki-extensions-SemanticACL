@@ -37,7 +37,6 @@ $wgMessagesDirs['SemanticACL'] = __DIR__ . '/i18n';
 
 // Register extension hooks.
 $wgHooks['userCan'][] = 'saclGetUserPermissionsErrors';
-$wgHooks['smwInitProperties'][] = 'saclInitProperties';
 $wgHooks['ParserFetchTemplate'][] = 'saclParserFetchTemplate';
 //$wgHooks['ImageBeforeProduceHTML'][] = 'saclImageBeforeProduceHTML';
 //$wgHooks['BeforeParserFetchFileAndTitle'][] = 'saclBeforeParserFetchFileAndTitle';
@@ -48,33 +47,30 @@ $wgGroupPermissions['sysop']['sacl-exempt'] = true;
 $wgAvailableRights[] = 'sacl-exempt';
 
 /** Initialise predefined properties. */
-function saclInitProperties() {
-	// Read restriction properties
-	SMWDIProperty::registerProperty( '___VISIBLE', '_str',
-					wfMessage('sacl-property-visibility')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___VISIBLE_WL_GROUP', '_str',
-					wfMessage('sacl-property-visibility-wl-group')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___VISIBLE_WL_USER', '_wpg',
-					wfMessage('sacl-property-visibility-wl-user')->inContentLanguage()->text() );
-
-	SMWDIProperty::registerPropertyAlias( '___VISIBLE', 'Visible to' );
-	SMWDIProperty::registerPropertyAlias( '___VISIBLE_WL_GROUP', 'Visible to group' );
-	SMWDIProperty::registerPropertyAlias( '___VISIBLE_WL_USER', 'Visible to user' );
-
-	// Write restriction properties
-	SMWDIProperty::registerProperty( '___EDITABLE', '_str',
-					wfMessage('sacl-property-editable')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___EDITABLE_WL_GROUP', '_str',
-					wfMessage('sacl-property-editable-wl-group')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___EDITABLE_WL_USER', '_wpg',
-					wfMessage('sacl-property-editable-wl-user')->inContentLanguage()->text() );
-
-	SMWDIProperty::registerPropertyAlias( '___EDITABLE', 'Editable by' );
-	SMWDIProperty::registerPropertyAlias( '___EDITABLE_WL_GROUP', 'Editable by group' );
-	SMWDIProperty::registerPropertyAlias( '___EDITABLE_WL_USER', 'Editable by user' );
-
+\Hooks::register( 'SMW::Property::initProperties', function( $propertyRegistry ) {
+	
+	// VISIBLE
+	$propertyRegistry->registerProperty( '___VISIBLE', '_str', 'Visible to' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE',	'sacl-property-visibility');
+	
+	$propertyRegistry->registerProperty( '___VISIBLE_WL_GROUP', '_str', 'Visible to group' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE_WL_GROUP', 'sacl-property-visibility-wl-group');
+	
+	$propertyRegistry->registerProperty( '___VISIBLE_WL_USER', '_str', 'Visible to user' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE_WL_USER',	'sacl-property-visibility-wl-user');
+	
+	// EDITABLE
+	$propertyRegistry->registerProperty( '___EDITABLE', '_str', 'Editable by' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE', 'sacl-property-Editable');
+	
+	$propertyRegistry->registerProperty( '___EDITABLE_WL_GROUP', '_str', 'Editable by group' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE_WL_GROUP', 'sacl-property-editable-wl-group');
+	
+	$propertyRegistry->registerProperty( '___EDITABLE_WL_USER', '_str', 'Editable by user' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE_WL_USER', 'sacl-property-editable-wl-user');
+	
 	return true;
-}
+} );
 
 /*function saclImageBeforeProduceHTML(&$skin, &$title, &$file, &$frameParams, &$handlerParams, &$time, &$res) {
 	if(hasPermission($title, 'read', RequestContext::getMain()->getUser(), true)){
@@ -211,7 +207,6 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 	
 	$store = smwfGetStore();
 	$subject = SMWDIWikiPage::newFromTitle( $title );
-	
 	$property = new SMWDIProperty($prefix);
 	$aclTypes = $store->getPropertyValues( $subject, $property );
 
@@ -261,9 +256,9 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 			$whitelistValues = $store->getPropertyValues( $subject, $userProperty );
 
 			foreach( $whitelistValues as $whitelistValue ) {
-				$title = $whitelistValue->getTitle();
+				$title = Title::newFromDBkey($whitelistValue->getString());
 
-				if ( $title->equals( $user->getUserPage() ) ) {
+				if ( $user->getUserPage()->equals($title) ) {
 					$isWhitelisted = true;
 				}
 			}
