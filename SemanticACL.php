@@ -50,23 +50,23 @@ $wgAvailableRights[] = 'sacl-exempt';
 \Hooks::register( 'SMW::Property::initProperties', function( $propertyRegistry ) {
 	
 	// VISIBLE
-	$propertyRegistry->registerProperty( '___VISIBLE', '_str', 'Visible to' );
+	$propertyRegistry->registerProperty( '___VISIBLE', '_txt', 'Visible to' );
 	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE',	'sacl-property-visibility');
 	
-	$propertyRegistry->registerProperty( '___VISIBLE_WL_GROUP', '_str', 'Visible to group' );
+	$propertyRegistry->registerProperty( '___VISIBLE_WL_GROUP', '_txt', 'Visible to group' );
 	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE_WL_GROUP', 'sacl-property-visibility-wl-group');
 	
-	$propertyRegistry->registerProperty( '___VISIBLE_WL_USER', '_str', 'Visible to user' );
+	$propertyRegistry->registerProperty( '___VISIBLE_WL_USER', '_txt', 'Visible to user' );
 	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE_WL_USER',	'sacl-property-visibility-wl-user');
 	
 	// EDITABLE
-	$propertyRegistry->registerProperty( '___EDITABLE', '_str', 'Editable by' );
+	$propertyRegistry->registerProperty( '___EDITABLE', '_txt', 'Editable by' );
 	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE', 'sacl-property-Editable');
 	
-	$propertyRegistry->registerProperty( '___EDITABLE_WL_GROUP', '_str', 'Editable by group' );
+	$propertyRegistry->registerProperty( '___EDITABLE_WL_GROUP', '_txt', 'Editable by group' );
 	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE_WL_GROUP', 'sacl-property-editable-wl-group');
 	
-	$propertyRegistry->registerProperty( '___EDITABLE_WL_USER', '_str', 'Editable by user' );
+	$propertyRegistry->registerProperty( '___EDITABLE_WL_USER', '_txt', 'Editable by user' );
 	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE_WL_USER', 'sacl-property-editable-wl-user');
 	
 	return true;
@@ -205,12 +205,12 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 		$prefix = '___EDITABLE';
 	}
 	
-	$store = smwfGetStore();
 	$subject = SMWDIWikiPage::newFromTitle( $title );
+	$store = SMW\StoreFactory::getStore()->getSemanticData($subject);
 	$property = new SMWDIProperty($prefix);
-	$aclTypes = $store->getPropertyValues( $subject, $property );
+	$aclTypes = $store->getPropertyValues( $property );
 
-	if($disableCaching && $aclTypes)
+	if($disableCaching)
 	{
 		/* If the parser caches the page, the same page will be returned without consideration for the user viewing the page.
 		 * Disable the cache to it gets rendered anew for every user. */
