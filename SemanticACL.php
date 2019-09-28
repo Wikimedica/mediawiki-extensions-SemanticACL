@@ -10,6 +10,7 @@
  * @defgroup SemanticACL
  * @package MediaWiki
  * @author Werdna (Andrew Garrett)
+ * @author Tinss (Antoine Mercier-Linteau)
  * @copyright (C) 2011 Werdna
  * @license https://www.gnu.org/copyleft/gpl.html GNU General Public License 2.0 or later
  */
@@ -38,8 +39,6 @@ $wgMessagesDirs['SemanticACL'] = __DIR__ . '/i18n';
 // Register extension hooks.
 $wgHooks['userCan'][] = 'saclGetUserPermissionsErrors';
 $wgHooks['ParserFetchTemplate'][] = 'saclParserFetchTemplate';
-//$wgHooks['ImageBeforeProduceHTML'][] = 'saclImageBeforeProduceHTML';
-//$wgHooks['BeforeParserFetchFileAndTitle'][] = 'saclBeforeParserFetchFileAndTitle';
 $wgHooks['BadImage'][] = 'saclBadImage';
 
 // Create extension's permissions
@@ -72,14 +71,6 @@ $wgAvailableRights[] = 'sacl-exempt';
 	return true;
 } );
 
-/*function saclImageBeforeProduceHTML(&$skin, &$title, &$file, &$frameParams, &$handlerParams, &$time, &$res) {
-	if(hasPermission($title, 'read', RequestContext::getMain()->getUser(), true)){
-		return true; // The user is allowed to view that file.
-	}
-	
-	return false;
-}*/
-
 /** When checking against the bad image list. Change $bad and return
 false to override. If an image is "bad", it is not rendered inline in wiki
 pages or galleries in category pages.
@@ -108,29 +99,6 @@ function saclBadImage($name, &$bad) {
 	$bad = true;
 	return false;
 }
-
-
-/**
- * Called before an image is rendered by Parser to check the image's permissions. Displays a broken link if the 
- * image cannot be viewed.
- * @param Parser $parser Parser object
- * @param Title $nt the image title
- * @param array $options array of options to RepoGroup::findFile. If it contains 'broken'
-  as a key then the file will appear as a broken thumbnail
- * @param string $descQuery: query string to add to thumbnail URL
- * */
-/*function saclBeforeParserFetchFileAndTitle($parser, $nt, &$options, &$descQuery) {
-	
-	// Also works with galleries.
-	
-	if(hasPermission($nt, 'read', RequestContext::getMain()->getUser(), true)){
-		return true; // The user is allowed to view that file.
-	}
-	
-	$options['broken'] = true; // Show a broken file link.
-	
-	return false;
-}*/
 
 /**
  * Called when the parser fetches a template. Replaces the template with an error message if the user cannot
@@ -189,9 +157,17 @@ function saclGetUserPermissionsErrors( &$title, &$user, $action, &$result ) {
 function hasPermission($title, $action, $user, $disableCaching = true)
 {
 	global $smwgNamespacesWithSemanticLinks;
+	global $wgSemanticACLWhitelistIPs;
+	global $wgRequest;
 	
 	if(!isset($smwgNamespacesWithSemanticLinks[$title->getNamespace()]) || !$smwgNamespacesWithSemanticLinks[$title->getNamespace()]) {
 		return true; // No need to check permissions on namespaces that do not support SemanticMediaWiki
+	}
+	
+	// Always allow whitelisted IPs through.
+	if(in_array($wgRequest->getIP(), $wgSemanticACLWhitelistIPs))
+	{
+		return true;
 	}
 	
 	// The prefix for the whitelisted group and user properties
