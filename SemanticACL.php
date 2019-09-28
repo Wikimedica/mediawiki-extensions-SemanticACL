@@ -165,7 +165,7 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 	}
 	
 	// Always allow whitelisted IPs through.
-	if(in_array($wgRequest->getIP(), $wgSemanticACLWhitelistIPs))
+	if(isset($wgSemanticACLWhitelistIPs) && in_array($wgRequest->getIP(), $wgSemanticACLWhitelistIPs))
 	{
 		return true;
 	}
