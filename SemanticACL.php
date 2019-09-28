@@ -10,6 +10,7 @@
  * @defgroup SemanticACL
  * @package MediaWiki
  * @author Werdna (Andrew Garrett)
+ * @author Tinss (Antoine Mercier-Linteau)
  * @copyright (C) 2011 Werdna
  * @license https://www.gnu.org/copyleft/gpl.html GNU General Public License 2.0 or later
  */
@@ -36,97 +37,88 @@ $wgExtensionCredits['semantic'][] = array(
 $wgMessagesDirs['SemanticACL'] = __DIR__ . '/i18n';
 
 // Register extension hooks.
-$wgHooks['userCan'][] = 'saclGetPermissionErrors';
-$wgHooks['smwInitProperties'][] = 'saclInitProperties';
-$wgHooks['ParserFetchTemplate'][] = 'saclCheckTemplatePermission';
-//$wgHooks['BeforeParserFetchTemplateAndtitle'][] = 'saclCheckTemplatePermission';
-$wgHooks['SpecialSearchResults'][] = 'saclCheckSearchResultsPermission';
-$wgHooks['BeforeParserFetchFileAndTitle'][] = 'saclCheckFilePermission';
+$wgHooks['userCan'][] = 'saclGetUserPermissionsErrors';
+$wgHooks['ParserFetchTemplate'][] = 'saclParserFetchTemplate';
+$wgHooks['BadImage'][] = 'saclBadImage';
+
 // Create extension's permissions
 $wgGroupPermissions['sysop']['sacl-exempt'] = true;
 $wgAvailableRights[] = 'sacl-exempt';
 
-// Initialise predefined properties
-function saclInitProperties() {
-	// Read restriction properties
-	SMWDIProperty::registerProperty( '___VISIBLE', '_str',
-					wfMessage('sacl-property-visibility')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___VISIBLE_WL_GROUP', '_str',
-					wfMessage('sacl-property-visibility-wl-group')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___VISIBLE_WL_USER', '_wpg',
-					wfMessage('sacl-property-visibility-wl-user')->inContentLanguage()->text() );
-
-	SMWDIProperty::registerPropertyAlias( '___VISIBLE', 'Visible to' );
-	SMWDIProperty::registerPropertyAlias( '___VISIBLE_WL_GROUP', 'Visible to group' );
-	SMWDIProperty::registerPropertyAlias( '___VISIBLE_WL_USER', 'Visible to user' );
-
-	// Write restriction properties
-	SMWDIProperty::registerProperty( '___EDITABLE', '_str',
-					wfMessage('sacl-property-editable')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___EDITABLE_WL_GROUP', '_str',
-					wfMessage('sacl-property-editable-wl-group')->inContentLanguage()->text() );
-	SMWDIProperty::registerProperty( '___EDITABLE_WL_USER', '_wpg',
-					wfMessage('sacl-property-editable-wl-user')->inContentLanguage()->text() );
-
-	SMWDIProperty::registerPropertyAlias( '___EDITABLE', 'Editable by' );
-	SMWDIProperty::registerPropertyAlias( '___EDITABLE_WL_GROUP', 'Editable by group' );
-	SMWDIProperty::registerPropertyAlias( '___EDITABLE_WL_USER', 'Editable by user' );
-
+/** Initialise predefined properties. */
+\Hooks::register( 'SMW::Property::initProperties', function( $propertyRegistry ) {
+	
+	// VISIBLE
+	$propertyRegistry->registerProperty( '___VISIBLE', '_txt', 'Visible to' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE',	'sacl-property-visibility');
+	
+	$propertyRegistry->registerProperty( '___VISIBLE_WL_GROUP', '_txt', 'Visible to group' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE_WL_GROUP', 'sacl-property-visibility-wl-group');
+	
+	$propertyRegistry->registerProperty( '___VISIBLE_WL_USER', '_txt', 'Visible to user' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__VISIBLE_WL_USER',	'sacl-property-visibility-wl-user');
+	
+	// EDITABLE
+	$propertyRegistry->registerProperty( '___EDITABLE', '_txt', 'Editable by' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE', 'sacl-property-Editable');
+	
+	$propertyRegistry->registerProperty( '___EDITABLE_WL_GROUP', '_txt', 'Editable by group' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE_WL_GROUP', 'sacl-property-editable-wl-group');
+	
+	$propertyRegistry->registerProperty( '___EDITABLE_WL_USER', '_txt', 'Editable by user' );
+	$propertyRegistry->registerPropertyDescriptionByMsgKey('__EDITABLE_WL_USER', 'sacl-property-editable-wl-user');
+	
 	return true;
-}
+} );
 
-function unHookPopups( OutputPage &$out, Skin &$skin )
-{
-	global $wgHooks;
-}
-
-function saclCheckFilePermission ($parser, $nt, &$options, &$descQuery) {
+/** When checking against the bad image list. Change $bad and return
+false to override. If an image is "bad", it is not rendered inline in wiki
+pages or galleries in category pages.
+@param string $name image name being checked
+@param bool &$bad  Whether or not the image is "bad" 
+@return bool false if the image is bad */
+function saclBadImage($name, &$bad) {
+	// Also works with galleries and categories.
 	
-	if(getPermissions($nt, '___VISIBLE', RequestContext::getMain()->getUser())){
-		return true; // The user is allowed to view that file.
-	}
-	
-	$options['broken'] = true;
-	
-	return false;
-}
-
-function saclCheckSearchResultsPermission ($term, &$titleMatches, &$textMatches) {
-	
-	if(get_class($textMatches) != 'SqlSearchResultSet' || get_class($titleMatches) != 'SqlSearchResultSet') {
-		return true;
-	}
+	$title = Title::newFromText($name, NS_FILE);
 	
 	$user = RequestContext::getMain()->getUser();
 	
-	$results = $titleMatches->extractResults();
-	foreach($results as $key => $result) {
-		if(!getPermissions($result->getTitle(), '___VISIBLE', $user)){
-			// The user is not allowed to view that page.
-			unset($results[$key]);
-		}
+	if(!fileHasRequiredCategory($title) && !$user->isAllowed( 'view-non-categorized-media') ) {
+		disableCaching();
+		$bad  = true;
+		return false;
 	}
-	$titleMatches = new SqlSearchResultSet
 	
-	
-	foreach($textMatches->extractResults() as $key => $result) {
-		if(!getPermissions($result->getTitle(), '___VISIBLE', $user)){
-			// The user is not allowed to view that page.
-			unset($textMatches->extractResults()[$key]);
-		}
+	if(hasPermission($title, 'read', $user , true)){
+		return true; // The user is allowed to view that file.
 	}
+	
+	disableCaching();
+	
+	$bad = true;
+	return false;
 }
 
-function saclCheckTemplatePermission ($parser, $title, $rev, &$text, &$deps) {
+/**
+ * Called when the parser fetches a template. Replaces the template with an error message if the user cannot
+ * view the template.
+ * @param Parser|false $parser Parser object or false
+ * @param Title $title Title object of the template to be fetched
+ * @param Revision $rev Revision object of the template
+ * @param string|false|null $text transclusion text of the template or false or null
+ * @param array $deps array of template dependencies with 'title', 'page_id', 'rev_id' keys
+ * */
+function saclParserFetchTemplate($parser, $title, $rev, &$text, &$deps) {
 //function saclCheckTemplatePermission ($parser, $title, &$skip, $id) {
 	
-	if(getPermissions($title, '___VISIBLE', RequestContext::getMain()->getUser())){
+	if(hasPermission($title, 'read', RequestContext::getMain()->getUser(), true)){
 		return true; // User is allowed to view that template.
 	}
 	
 	global $wgHooks;
 	
-	$hookName = 'saclCheckTemplatePermission';
+	$hookName = 'saclParserFetchTemplate';
 	if($hookIndex = array_search($hookName, $wgHooks['ParserFetchTemplate']) === false) {
 		throw new Exception('Function name could no be found in hook.'); // This would only happen with a code refactoring mistake.
 	}
@@ -141,48 +133,80 @@ function saclCheckTemplatePermission ($parser, $title, $rev, &$text, &$deps) {
 	return false;
 }
 
-function saclGetPermissionErrors( $title, $user, $action, &$result ) {
+/**
+ *  To interrupt/advise the "user can do X to Y article" check.
+ * @param Title $title Title object being checked against
+ * @param User $user Current user object
+ * @param string $action Action being checked
+ * @param array|string &$result User permissions error to add. If none, return true. $result can be returned as a single error message key (string), or an array of error message keys when multiple messages are needed (although it seems to take an array as one message key with parameters?).
+ * @return bool if the user has permissions to do the action
+ * */
+function saclGetUserPermissionsErrors( &$title, &$user, $action, &$result ) {
+	
+	//This hook is also triggered when displaying search results.
+	
+	return hasPermission($title, $action, $user, false);
+}
 
+/** Checks if the provided user can do an action on a page.
+ * @param Title $title the title object to check permission on 
+ * @param string $action the action the user wants to do
+ * @param User $user the user to check permissions for
+ * @param bool $disableCaching force the page being checked to be rerendered for each user
+ * @return boolean if the user is allowed to conduct the action */
+function hasPermission($title, $action, $user, $disableCaching = true)
+{
+	global $smwgNamespacesWithSemanticLinks;
+	global $wgSemanticACLWhitelistIPs;
+	global $wgRequest;
+	
+	if(!isset($smwgNamespacesWithSemanticLinks[$title->getNamespace()]) || !$smwgNamespacesWithSemanticLinks[$title->getNamespace()]) {
+		return true; // No need to check permissions on namespaces that do not support SemanticMediaWiki
+	}
+	
+	// Always allow whitelisted IPs through.
+	if(isset($wgSemanticACLWhitelistIPs) && in_array($wgRequest->getIP(), $wgSemanticACLWhitelistIPs))
+	{
+		return true;
+	}
+	
 	// The prefix for the whitelisted group and user properties
 	// Either ___VISIBLE or ___EDITABLE
 	$prefix = '';
-
-	if ( $action == 'read' ) {
+	
+	// Build the semantic property prefix according to the action.
+	if ( $action == 'read' || $action == 'raw' ) {
 		$prefix = '___VISIBLE';
 	} else {
 		$prefix = '___EDITABLE';
 	}
 	
-	if(!getPermissions($title, $prefix, $user))
+	$subject = SMWDIWikiPage::newFromTitle( $title );
+	$store = SMW\StoreFactory::getStore()->getSemanticData($subject);
+	$property = new SMWDIProperty($prefix);
+	$aclTypes = $store->getPropertyValues( $property );
+
+	if($disableCaching)
 	{
-		$result = false;
-		return false;
-	}
-		
-	return true;
-}
-
-
-function getPermissions($title, $prefix, $user)
-{
-	global $smwgNamespacesWithSemanticLinks;
-	
-	if(!isset($smwgNamespacesWithSemanticLinks[$title->getNamespace()]) || !$smwgNamespacesWithSemanticLinks[$title->getNamespace()]) {
-		return true; // No need to check permissions on namespaces that do not support SMW.
+		/* If the parser caches the page, the same page will be returned without consideration for the user viewing the page.
+		 * Disable the cache to it gets rendered anew for every user. */
+		disableCaching();
 	}
 	
-	// Failsafe: Some users are exempt from Semantic ACLs
-	if ( $user->isAllowed( 'sacl-exempt' ) ) {
+	// Failsafe: Some users are exempt from Semantic ACLs.
+	if ( $user->isAllowed( 'sacl-exempt') ) {
 		return true;
 	}
 	
-	$store = smwfGetStore();
-	$subject = SMWDIWikiPage::newFromTitle( $title );
-	
-	$property = new SMWDIProperty($prefix);
-	$aclTypes = $store->getPropertyValues( $subject, $property );
+	if($title->getNamespace() == NS_FILE) {
 		
+		if(!fileHasRequiredCategory($title) && !$user->isAllowed( 'view-non-categorized-media') ) {
+			return false;
+		}
+	}
+	
 	foreach( $aclTypes as $valueObj ) {
+	
 		$value = strtolower($valueObj->getString());
 
 		if ( $value == 'users' ) {
@@ -208,9 +232,9 @@ function getPermissions($title, $prefix, $user)
 			$whitelistValues = $store->getPropertyValues( $subject, $userProperty );
 
 			foreach( $whitelistValues as $whitelistValue ) {
-				$title = $whitelistValue->getTitle();
+				$title = Title::newFromDBkey($whitelistValue->getString());
 
-				if ( $title->equals( $user->getUserPage() ) ) {
+				if ( $user->getUserPage()->equals($title) ) {
 					$isWhitelisted = true;
 				}
 			}
@@ -223,5 +247,48 @@ function getPermissions($title, $prefix, $user)
 		}
 	}
 
+	return true;
+}
+
+
+/** Disable caching for the page currently being rendered. */
+function disableCaching() {
+	global $wgParser;
+	if($wgParser->getOutput()) {
+		$wgParser->getOutput()->updateCacheExpiry(0);
+	}
+	
+	RequestContext::getMain()->getOutput()->enableClientCache(false);
+}
+
+/** Files that have not been categorized most likely have an unknown status when it comes to author's rights. This function tests if 
+ * a file is part of a category for files whose's permissions have been set.
+ * @param Title $title the title of the file
+ * @return boolean if the file has been properly categorized */
+function fileHasRequiredCategory($title) {
+	global $wgPublicImagesCategory;
+	
+	if(isset($wgPublicImagesCategory) && $wgPublicImagesCategory && $title->getNamespace() == NS_FILE) {
+		
+		$inCategory = false;
+		
+		$page = Article::newFromTitle($title, RequestContext::getMain());
+		$file = $page->getFile(); //wfFindFile( $this->getTitle() )
+		
+		if(!$file->isLocal()) { // Foreign files are always shown.
+			return true;
+		}
+		
+		foreach($page->getCategories() as $category)
+		{
+			if($category->getDBKey() == str_replace(" ", "_", $wgPublicImagesCategory))
+			{
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
 	return true;
 }
