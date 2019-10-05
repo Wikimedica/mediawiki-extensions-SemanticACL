@@ -164,12 +164,6 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 		return true; // No need to check permissions on namespaces that do not support SemanticMediaWiki
 	}
 	
-	// Always allow whitelisted IPs through.
-	if(isset($wgSemanticACLWhitelistIPs) && in_array($wgRequest->getIP(), $wgSemanticACLWhitelistIPs))
-	{
-		return true;
-	}
-	
 	// The prefix for the whitelisted group and user properties
 	// Either ___VISIBLE or ___EDITABLE
 	$prefix = '';
@@ -195,6 +189,12 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 	
 	// Failsafe: Some users are exempt from Semantic ACLs.
 	if ( $user->isAllowed( 'sacl-exempt') ) {
+		return true;
+	}
+	
+	// Always allow whitelisted IPs through.
+	if(isset($wgSemanticACLWhitelistIPs) && in_array($wgRequest->getIP(), $wgSemanticACLWhitelistIPs))
+	{
 		return true;
 	}
 	
