@@ -218,7 +218,7 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 
 			$groupProperty = new SMWDIProperty( "{$prefix}_WL_GROUP" );
 			$userProperty = new SMWDIProperty( "{$prefix}_WL_USER" );
-			$whitelistValues = $store->getPropertyValues( $subject, $groupProperty );
+			$whitelistValues = $store->getPropertyValues( $groupProperty );
 
 			foreach( $whitelistValues as $whitelistValue ) {
 				$group = strtolower($whitelistValue->getString());
@@ -229,7 +229,7 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 				}
 			}
 
-			$whitelistValues = $store->getPropertyValues( $subject, $userProperty );
+			$whitelistValues = $store->getPropertyValues( $userProperty );
 
 			foreach( $whitelistValues as $whitelistValue ) {
 				$title = Title::newFromDBkey($whitelistValue->getString());
