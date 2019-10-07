@@ -160,6 +160,11 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 	global $wgSemanticACLWhitelistIPs;
 	global $wgRequest;
 	
+	if($title->isTalkPage())
+	{
+		$title = $title->getSubjectPage(); // Talk pages get the same permission as their subject page.
+	}
+	
 	if(!isset($smwgNamespacesWithSemanticLinks[$title->getNamespace()]) || !$smwgNamespacesWithSemanticLinks[$title->getNamespace()]) {
 		return true; // No need to check permissions on namespaces that do not support SemanticMediaWiki
 	}
