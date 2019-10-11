@@ -164,6 +164,20 @@ function hasPermission($title, $action, $user, $disableCaching = true)
 	{
 		$title = $title->getSubjectPage(); // Talk pages get the same permission as their subject page.
 	}
+	else if(\ExtensionRegistry::getInstance()->isLoaded( 'Flow' )) // If the Flow extension is installed.
+	{
+		if($title->getNamespace() == NS_TOPIC)
+		{
+			// Retrieve the board associated with the topic.
+			$storage = Flow\Container::get( 'storage.workflow' );
+			$uuid = Flow\WorkflowLoaderFactory::uuidFromTitle( $title );
+			$workflow = $storage->get( $uuid );
+			if($workflow) // If for some reason there is no associated workflow, do not fail.
+			{ 
+				return hasPermission($workflow->getOwnerTitle(), $action, $user, $disableCaching);
+			} 
+		}
+	}
 	
 	if(!isset($smwgNamespacesWithSemanticLinks[$title->getNamespace()]) || !$smwgNamespacesWithSemanticLinks[$title->getNamespace()]) {
 		return true; // No need to check permissions on namespaces that do not support SemanticMediaWiki
